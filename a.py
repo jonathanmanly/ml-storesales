@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
 
-
+print "loading data"
 df = pd.read_csv("train.csv",low_memory=False)
+
+allStores = list(set(df['Store']))
 
 store = pd.read_csv("store.csv")
 
@@ -16,6 +18,8 @@ df['sales_month'] = df['sales_month'].astype(str)
 
 df['year'] = df['date_dt'].dt.year
 #df.drop([u'date_dt'],axis=1,inplace=True)
+
+print "sorting data"
 
 df=df.sort_values(['Store','Date'])
 
@@ -36,6 +40,8 @@ store['Promo2_9']=0
 store['Promo2_10']=0
 store['Promo2_11']=0
 store['Promo2_12']=0
+
+print "vectorizing promo2"
 
 for s in range(len(store)):
     if pd.isnull(store.loc[s]['PromoInterval']):
@@ -59,18 +65,46 @@ for s in range(len(store)):
 
 store.drop([u'PromoInterval'],axis=1,inplace=True)
 
+print "merging stores and sale days"
 
 df=pd.merge(df,store,how='left',left_on='Store',right_on='Store')
 
-df['EffectiveCompetitionDistance']=0
-df['NoCompetition']=1
-df['Promo2Effective']=0
 
-for r in range(len(df)):
-    if (df.loc[r]['CompetitionOpenSinceMonth']>=df.loc[r]['date_dt'].month and df.loc[r]['CompetitionOpenSinceYear']>=df.loc[r]['date_dt'].year) \
-            or df.loc[r]['CompetitionOpenSinceYear']>df.loc[r]['date_dt'].year:
-        df = df.set_value(r,'EffectiveCompetition_Distance',df.loc[r]['CompetitionDistance'])
-        df = df.set_value(r,'NoCompetition',0)
+#df['EffectiveCompetitionDistance']=0
+#df['NoCompetition']=1
+#df['Promo2Effective']=0
+
+print "normalizing promotional and competition data"
+
+
+df['m']=df['date_dt'].dt.month
+
+df['cf']=1*(df['CompetitionOpenSinceMonth']>=df['date_dt'].dt.month )*(df['CompetitionOpenSinceYear']==df['date_dt'].dt.year)
+df['cf2']=1*(df['CompetitionOpenSinceYear']>df['date_dt'].dt.year)
+df['competitionActive']=df[['cf','cf2']].max(axis=1)
+df['EffectiveCompetitionDistance'] = df['competitionActive']*df['CompetitionDistance']
+df=df.drop(['cf','cf2'],axis=1)
+
+
+df['pr1']=1*(df['Promo2SinceWeek']>=df['date_dt'].dt.week)*(df['Promo2SinceYear']==df['date_dt'].dt.year)
+df['pr2']=1*(df['Promo2SinceYear']>df['date_dt'].dt.year)
+df['promo2Effective']=df[['pr1','pr2']].max(axis=1)
+
+df['promo2Active'] = (1*df['promo2Effective']*(df['date_dt'].dt.month==1*df['Promo2_1'])+ \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==2*df['Promo2_2']) + \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==3*df['Promo2_3']) + \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==4*df['Promo2_4']) + \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==5*df['Promo2_5']) + \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==6*df['Promo2_6']) + \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==7*df['Promo2_7']) + \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==8*df['Promo2_8']) + \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==9*df['Promo2_9']) + \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==10*df['Promo2_10']) + \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==11*df['Promo2_11']) + \
+                    1*df['promo2Effective']*(df['date_dt'].dt.month==12*df['Promo2_12']) )
+
+'''
+
     if ((df.loc[r]['Promo2SinceWeek']>=df.loc[r]['date_dt'].week and df.loc[r]['Promo2SinceYear']>=df.loc[r]['date_dt'].year)
             or df.loc[r]['Promo2SinceYear']>df.loc[r]['date_dt'].year):
         df['Promo2Effective']=(df.loc[r]['Promo2_1']*(df.loc[r]['date_dt'].month==1)+
@@ -86,8 +120,8 @@ for r in range(len(df)):
             df.loc[r]['Promo2_11']*(df.loc[r]['date_dt'].month==11)+
             df.loc[r]['Promo2_12']*(df.loc[r]['date_dt'].month==12))
 
-
-
+'''
+print "done normalizing promotional and competition data"
 
 df=df.drop(['CompetitionDistance','Promo2SinceWeek','Promo2SinceYear','CompetitionOpenSinceMonth','CompetitionOpenSinceYear'],axis=1)
 
@@ -97,9 +131,10 @@ df=df.drop(['CompetitionDistance','Promo2SinceWeek','Promo2SinceYear','Competiti
 
 df_new = None
 
-allStores = list(set(df['Store']))
 
-for s in allStores[:3]:
+
+for s in allStores:
+    print "time shifting",s
     df_store = pd.DataFrame(df[df['Store']==s])
     df_store['Sales30']=df_store['Sales'].shift(30)
     df_store['Sales7']=df_store['Sales'].shift(7)
@@ -129,7 +164,8 @@ df_new['SchoolHoliday-1'] =df_new['SchoolHoliday-1'].fillna(0)
 
 
 
-
+print "making dummies and merging"
+df_new['Store']=df_new['Store'].astype(str)
 
 dummies = pd.get_dummies(df_new[['Store','day_of_week','sales_month','StoreType','Assortment']])
 df_new = df_new.drop( ['DayOfWeek', 'Date', 'Customers', 'day_of_week','sales_month', 'year', 'StoreType', 'Assortment', 'Promo2'],axis=1)
