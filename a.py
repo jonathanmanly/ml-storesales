@@ -1,5 +1,8 @@
 import pandas as pd
 import numpy as np
+import datetime
+
+start_time = datetime.datetime.now()
 
 print "loading data"
 df = pd.read_csv("train.csv",low_memory=False)
@@ -175,4 +178,6 @@ df_final = pd.concat([df_new,dummies],axis=1)
 print "Final dataset is",df_final.shape
 
 df_final.to_csv("training_data_processed.csv")
+
+print "preprocessing completed in ",datetime.datetime.now()-start_time
 
